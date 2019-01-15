@@ -1,0 +1,108 @@
+#!/bin/bash
+shopt -s extglob
+
+usage() {
+    echo "Usage: ${0} <OS> [region]"
+
+    echo "Return the most recent AMI for a given operating system/distribution. "
+    echo "Examples: "
+    echo "${0} rhel"
+    echo "${0} rhel7.3"
+    echo
+    echo "Supported arguments: "
+    echo "Red Hat"
+    echo "Ubuntu"
+    echo "SuSE (SLES)"
+    echo "Amazon Linux"
+    echo "Amazon Linux 2"
+    echo "Windows"
+    echo 
+
+}
+
+find_by_describe() {
+    if [[ $1 == "rhel" ]]; then
+        if [[ -z "$2" ]]; then
+            version="7.6"
+        fi
+
+        account="309956199498"
+        filter_string="RHEL-${version}_HVM_GA-*-x86_64-*-Hourly2-GP2"
+    elif [[ $1 == "ubuntu" ]]; then
+        if [[ -z "$2" ]]; then
+            version="18.04"
+            label="bionic"
+        fi
+
+        if [[ $2 == "14.04" ]]; then
+            label="trusty"
+        elif [[ $2 == "16.04" ]]; then
+            label="xenial"
+        elif [[ $2 == "18.04" ]]; then
+            label="bionic"
+        fi
+        account="099720109477"
+        filter_string="ubuntu/images/hvm-ssd/ubuntu-${label}-${version}-amd64-server-*"
+    elif [[ $1 == "sles" ]]; then
+        if [[ -z "$2" ]]; then
+            version="15"
+        fi
+        account="013907871322"
+        filter_string="suse-sles-${version}*"
+    else
+        usage
+        exit 1
+    fi
+
+    aws ec2 describe-images \
+    --owners ${account} \
+    --filters Name=name,Values=${filter_string} \
+    --query 'sort_by(Images,&CreationDate)[-1].ImageId' \
+    --region ${region} --output text
+}
+
+find_by_ssm() {
+    aws ssm get-parameter --name /aws/service/ami-amazon-linux-latest/$1-ami-hvm-x86_64-gp2 --query 'Parameter.Value' --region ${region} --output text
+}
+
+if [[ $# -eq 0 ]]; then
+    usage
+    exit 1
+fi
+
+if [[ -z $2 ]]; then
+    region=$(aws configure get region)
+else
+    region=$2
+fi
+
+case "$1" in
+    "rhel"*|"redhat"*)
+        os="rhel"
+        version=$(echo ${1} | sed 's/[a-zA-Z]//g')
+        find_by_describe ${os} ${version}
+        ;;
+    "ubuntu"*)
+        os="ubuntu"
+        version=$(echo ${1} | sed 's/[a-zA-Z]//g')
+        find_by_describe ${os} ${version}
+        ;;
+    "suse"*|"sles"*)
+        os="sles"
+        version=$(echo ${1} | sed 's/[a-zA-Z]//g')
+        find_by_describe ${os} ${version}
+        ;;
+    "amzn"|"alami"|"amazon"|"amazon-linux")
+        os="amzn"
+        find_by_ssm ${os}
+        ;;
+    "amzn2"|"alami2"|"amazon2"|"amazon-linux2")
+        os="amzn2"
+        find_by_ssm ${os}
+        ;;
+    "win"|"windows")
+        os="windows"
+        ;;
+    *)
+        os="unknown"
+esac
