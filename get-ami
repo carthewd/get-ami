@@ -15,6 +15,7 @@ usage() {
     echo "SuSE (SLES)"
     echo "Amazon Linux"
     echo "Amazon Linux 2"
+    echo "CentOS"
     echo "Windows"
     echo 
 
@@ -49,6 +50,12 @@ find_by_describe() {
         fi
         account="013907871322"
         filter_string="suse-sles-${version}*"
+    elif [[ $1 == "centos" ]]; then
+        if [[ -z "$2" ]]; then
+            version="7"
+        fi
+        account="679593333241"
+        filter_string="CentOS Linux ${version} x86_64 HVM EBS*"    
     else
         usage
         exit 1
@@ -56,7 +63,7 @@ find_by_describe() {
 
     aws ec2 describe-images \
     --owners ${account} \
-    --filters Name=name,Values=${filter_string} \
+    --filters Name=name,Values="${filter_string}" \
     --query 'sort_by(Images,&CreationDate)[-1].ImageId' \
     --region ${region} --output text
 }
@@ -102,6 +109,11 @@ case "$1" in
         ;;
     "win"|"windows")
         os="windows"
+        ;;
+    "centos")
+        os="centos"
+        version=$(echo ${1} | sed 's/[a-zA-Z]//g')
+        find_by_describe ${os} ${version}
         ;;
     *)
         os="unknown"
